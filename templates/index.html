@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🇮🇳 Bharat News Atlas</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        #map { height: 100vh; width: 100%; background: #A3C6D4; } 
+        
+        /* Popup Styling */
+        .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            padding: 0;
+            overflow: hidden;
+        }
+        .leaflet-popup-content { margin: 0; width: 280px !important; }
+        
+        .news-header {
+            padding: 12px 15px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            /* Header color will be set dynamically via JS */
+        }
+        .news-list {
+            padding: 15px;
+            max-height: 250px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #333;
+            background: white;
+        }
+        .news-item {
+            position: relative;
+            margin-bottom: 12px;
+            padding-left: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            padding-bottom: 8px;
+        }
+        .news-item:last-child { border-bottom: none; }
+        .news-item::before {
+            content: "➤";
+            position: absolute;
+            left: 0;
+            color: #555;
+            font-size: 10px;
+            top: 3px;
+        }
+
+        /* LEGEND STYLING (The New Bar) */
+        .info.legend {
+            background: white;
+            padding: 10px 15px;
+            line-height: 20px;
+            color: #555;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            font-size: 12px;
+        }
+        .info.legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.8;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+    <script>
+        var map = L.map('map').setView([22.3511, 78.6677], 5);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap',
+            maxZoom: 18,
+            minZoom: 4,
+            opacity: 0.8
+        }).addTo(map);
+
+        // --- 1. THE COLOR LOGIC (Low to High) ---
+        function getColor(d) {
+            return d > 10 ? '#800026' : // Dark Red (Explosive)
+                   d > 5  ? '#BD0026' : // Red (High)
+                   d > 3  ? '#E31A1C' : // Orange-Red (Medium-High)
+                   d > 1  ? '#FD8D3C' : // Orange (Medium)
+                            '#FEB24C';  // Yellow (Low)
+        }
+
+        fetch('/api/news')
+            .then(response => response.json())
+            .then(data => {
+                
+                var heatData = [];
+                var maxVal = 0;
+
+                data.forEach(point => {
+                    var lat = point.Latitude || point.Lat;
+                    var lng = point.Longitude || point.Long;
+                    var stateName = point['State/UT'] || point['State'];
+
+                    if (!lat || !lng) return;
+
+                    if (point.news_count > maxVal) maxVal = point.news_count;
+                    
+                    // Heatmap Array
+                    heatData.push([lat, lng, point.news_count]);
+
+                    // --- 2. DYNAMIC MARKERS ---
+                    var markerColor = getColor(point.news_count);
+                    
+                    // Calculate size (Standardized)
+                    var radiusSize = Math.min(Math.max(point.news_count * 2, 8), 30); 
+
+                    var circle = L.circleMarker([lat, lng], {
+                        color: 'white',
+                        weight: 1,
+                        fillColor: markerColor, // <--- DYNAMIC COLOR HERE
+                        fillOpacity: 0.9,
+                        radius: radiusSize
+                    }).addTo(map);
+
+                    // Content Processing
+                    var cleanHeadlines = (point.headlines || "").replace(/➤/g, '<div class="news-item">');
+                    cleanHeadlines = cleanHeadlines.replace(/<br>/g, '</div>');
+
+                    // Dynamic Header Background to match the marker
+                    var popupContent = `
+                        <div class="news-header" style="background-color: ${markerColor};">
+                            ${stateName} <span style="float:right; opacity:0.8;">${point.news_count} Stories</span>
+                        </div>
+                        <div class="news-list">
+                            ${cleanHeadlines}
+                        </div>
+                    `;
+
+                    circle.bindPopup(popupContent);
+                    circle.on('mouseover', function (e) { this.openPopup(); });
+                });
+
+                // Add Heat Layer (Adjusted for visibility)
+                if (heatData.length > 0) {
+                    L.heatLayer(heatData, {
+                        radius: 60,
+                        blur: 40,
+                        maxZoom: 10,
+                        max: maxVal * 0.6, // Lower max makes colors pop sooner
+                        gradient: {
+                            0.2: '#FEB24C', // Yellow
+                            0.5: '#FD8D3C', // Orange
+                            0.8: '#E31A1C', // Red
+                            1.0: '#800026'  // Dark Red
+                        }
+                    }).addTo(map);
+                }
+
+                // --- 3. THE LEGEND CONTROL ---
+                var legend = L.control({position: 'bottomright'});
+
+                legend.onAdd = function (map) {
+                    var div = L.DomUtil.create('div', 'info legend'),
+                        grades = [1, 2, 4, 6, 11],
+                        labels = [];
+
+                    div.innerHTML = '<strong>News Volume</strong><br>';
+
+                    // Loop through density intervals and generate a label with a colored square
+                    for (var i = 0; i < grades.length; i++) {
+                        div.innerHTML +=
+                            '<i style="background:' + getColor(grades[i]) + '"></i> ' +
+                            (grades[i] === 1 ? '1 Story' : 
+                             grades[i] === 11 ? '10+ Stories' : 
+                             grades[i] + (grades[i + 1] ? '&ndash;' + (grades[i + 1] - 1) : '+')) + '<br>';
+                    }
+
+                    return div;
+                };
+
+                legend.addTo(map);
+
+            })
+            .catch(error => console.error('Error:', error));
+    </script>
+</body>
+</html>
