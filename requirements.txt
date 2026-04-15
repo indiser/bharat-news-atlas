@@ -2,3 +2,4 @@ Flask
 pandas
 feedparser
 gunicorn
+uvicorn
