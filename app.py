@@ -1,19 +1,26 @@
 from flask import Flask, render_template, jsonify
 import pandas as pd
 import os
-import subprocess
+import asyncio
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
+from sqlalchemy import create_engine
+from fetch_news import get_all_news
+from process_data_india import process_and_push_to_db
 
 app = Flask(__name__)
 
 def run_pipeline():
-    """Executes the fetch and process scripts autonomously."""
-    print("🚀 Running Background Pipeline...")
+    """Executes the pipeline purely in RAM, no subprocesses, no temp files."""
+    print("🚀 Running Background Pipeline natively...")
     try:
-        subprocess.run(["python", "fetch_news.py"], check=True)
-        subprocess.run(["python", "process_data_india.py"], check=True)
-        print("✅ Data successfully updated.")
+        # 1. Fetch data into a RAM variable
+        news_data = asyncio.run(get_all_news())
+        
+        # 2. Pass that variable directly to the database processor
+        process_and_push_to_db(news_data)
+        
+        print("✅ Pipeline execution complete.")
     except Exception as e:
         print(f"❌ Pipeline failed: {e}")
 
@@ -33,16 +40,22 @@ def home():
 @app.route('/api/news')
 def get_news():
     try:
-        # Load your processed data
-        if os.path.exists("india_heatmap_data.csv"):
-            df = pd.read_csv("india_heatmap_data.csv")
-            df = df.fillna("")
-            news_data = df.to_dict(orient='records')
-            return jsonify(news_data)
-        else:
-            return jsonify([])
+        # Pull the secure string
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return jsonify({"error": "Database not configured."}), 500
+            
+        engine = create_engine(db_url)
+        
+        # Pull data directly from Neon
+        df = pd.read_sql("SELECT * FROM heatmap_data", engine)
+        df.fillna("", inplace=True)
+        
+        news_data = df.to_dict(orient='records')
+        return jsonify(news_data)
+        
     except Exception as e:
-        return jsonify({"error": str(e)})
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run()
