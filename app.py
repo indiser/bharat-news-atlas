@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import subprocess
 from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -17,7 +18,12 @@ def run_pipeline():
         print(f"❌ Pipeline failed: {e}")
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=run_pipeline, trigger="interval", hours=1)
+scheduler.add_job(
+    func=run_pipeline, 
+    trigger="interval", 
+    hours=1,
+    next_run_time=datetime.now()
+)
 scheduler.start()
 
 @app.route('/')
@@ -39,5 +45,4 @@ def get_news():
         return jsonify({"error": str(e)})
 
 if __name__ == '__main__':
-    run_pipeline()
     app.run()
