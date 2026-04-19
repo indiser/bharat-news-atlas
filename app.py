@@ -28,8 +28,7 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(
     func=run_pipeline, 
     trigger="interval", 
-    hours=1,
-    next_run_time=datetime.now()
+    hours=1
 )
 scheduler.start()
 
