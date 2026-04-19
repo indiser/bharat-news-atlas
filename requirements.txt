@@ -1,6 +1,10 @@
 Flask
 pandas
 feedparser
-apscheduler
 gunicorn
+psycopg2-binary
+sqlalchemy
 uvicorn
+apscheduler
+asyncio
+aiohttp
