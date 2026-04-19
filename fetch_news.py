@@ -1,16 +1,19 @@
+import asyncio
+import aiohttp
 import feedparser
 import json
-import time
+import os
+import sys
 
 # List of Reliable RSS Feeds (India Specific)
 RSS_FEEDS = [
-    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",       # TOI Top Stories
+    "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",       
     "https://feeds.feedburner.com/NDTV-LatestNews",
-    "https://www.ndtv.com/rss/top-stories",                             # NDTV Top Stories
-    "https://www.indiatoday.in/rss/1206584",                            # India Today (National)
+    "https://www.ndtv.com/rss/top-stories",                             
+    "https://www.indiatoday.in/rss/1206584",                            
     "https://www.indiatoday.in/rss/1206578",
-    "https://indianexpress.com/section/india/feed/",                    # Indian Express (India)
-    "https://www.thehindu.com/news/national/feeder/default.rss"         # The Hindu (National)
+    "https://indianexpress.com/section/india/feed/",                    
+    "https://www.thehindu.com/news/national/feeder/default.rss",         
     "https://indianexpress.com/feed/",
     "https://www.firstpost.com/commonfeeds/v1/mfp/rss/web-stories.xml",
     "https://www.business-standard.com/rss/latest.rss",
@@ -40,43 +43,50 @@ RSS_FEEDS = [
     "https://feeds.feedburner.com/ndtvnews-top-stories",
     "https://feeds.feedburner.com/ndtvnews-latest",
     "https://feeds.feedburner.com/ndtvnews-india-news",
-    "https://www.hindustantimes.com/feeds/rss/cities/kolkata-news/rssfeed.xml"
+    "https://www.hindustantimes.com/feeds/rss/cities/kolkata-news/rssfeed.xml",
+    "https://indianexpress.com/feed/",
+    "https://www.thehindu.com/news/national/feeder/default.rss"
 ]
 
-articles_list = []
-
-print(f"Connecting to {len(RSS_FEEDS)} news feeds...")
-
-for url in RSS_FEEDS:
-    print(f"Fetching: {url}...")
+async def fetch_feed(session, url):
+    """Fetches a single feed asynchronously and parses the text."""
     try:
-        feed = feedparser.parse(url)
-        
-        # Check if feed works
-        if feed.bozo:
-            print(f"  Warning: Issue parsing {url}")
-            continue
-            
-        print(f"  -> Found {len(feed.entries)} articles.")
-        
-        for entry in feed.entries:
-            # RSS feeds use 'title' and 'summary' (or 'description')
-            title = entry.title
-            # Clean up the description (sometimes it has HTML tags)
-            description = entry.summary if 'summary' in entry else ""
-            
-            articles_list.append({
-                "title": title,
-                "description": description
-            })
-            
+        # A 10-second timeout ensures one dead server doesn't hang your pipeline
+        async with session.get(url, timeout=10) as response:
+            if response.status == 200:
+                text = await response.text()
+                
+                # Parse the raw XML string asynchronously
+                feed = feedparser.parse(text)
+                
+                if feed.bozo:
+                    return []
+                
+                articles = []
+                for entry in feed.entries:
+                    title = entry.title if 'title' in entry else ""
+                    description = entry.summary if 'summary' in entry else ""
+                    articles.append({"title": title, "description": description})
+                
+                print(f"  -> Found {len(articles)} articles from {url}")
+                return articles
+            else:
+                print(f"  Warning: {response.status} from {url}")
+                return []
     except Exception as e:
-        print(f"  Error fetching {url}: {e}")
+        print(f"  Error connecting to {url}: {e}")
+        return []
 
-# Save in the EXACT format your Processor expects
-data = {"articles": articles_list}
+async def get_all_news():
+    print(f"🚀 Concurrently fetching {len(RSS_FEEDS)} news feeds...")
+    articles_list = []
+    
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_feed(session, url) for url in RSS_FEEDS]
+        results = await asyncio.gather(*tasks)
+        for result in results:
+            articles_list.extend(result)
 
-with open("news_data.json", "w",encoding="utf-8") as filp:
-    json.dump(data, filp, indent=4, ensure_ascii=False)
-
-print(f"\nSUCCESS: Saved {len(articles_list)} articles to 'news_data.json'.")
+    # Return the data directly to RAM, do not save to disk
+    print(f"✅ Fetched {len(articles_list)} articles.")
+    return {"articles": articles_list}
