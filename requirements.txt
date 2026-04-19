@@ -8,3 +8,4 @@ uvicorn
 apscheduler
 asyncio
 aiohttp
+python-dotenv
