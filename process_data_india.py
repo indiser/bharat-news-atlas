@@ -2,11 +2,11 @@ import pandas as pd
 import json
 import os
 
-# 1. Load the Location Data (which now has the 'cities' column)
-# Try absolute path first, then relative
-file_path = "C:/Users/ranab/OneDrive/Desktop/India Heatmap/india_locations_cities.csv"
+script_dir=os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(script_dir, "india_locations_cities.csv")
 if not os.path.exists(file_path):
-    file_path = "india_locations_cities.csv"
+    print(f"Error: Could not find '{file_path}'. Make sure it is pushed to the repo.")
+    exit()
 
 try:
     # We load the file you just created, which has State, Lat, Long, and Cities
