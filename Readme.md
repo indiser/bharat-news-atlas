@@ -1,301 +1,261 @@
-# 🇮🇳 Bharat News Atlas
-## Real-Time News Heatmap of India
+# # 🇮🇳 Bharat News Atlas
 
-<div align="center">
+Real-time geospatial visualization of news across India using async RSS aggregation and PostgreSQL.
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue?style=flat-square&logo=python)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-Web%20Server-green?style=flat-square&logo=flask)](https://flask.palletsprojects.com/)
-[![Leaflet.js](https://img.shields.io/badge/Leaflet.js-Interactive%20Maps-lime?style=flat-square&logo=leaflet)](https://leafletjs.com/)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-
-**Transform raw news data into stunning geospatial intelligence. Visualize India's news landscape in real-time across all states and major cities.**
-
-[🎯 Features](#features) • [⚡ Quick Start](#quick-start) • [📖 Documentation](#documentation) • [🏗️ Architecture](#architecture)
-
-</div>
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.0-green.svg)](https://flask.palletsprojects.com/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-## 🎯 Features
+## Overview
 
-✨ **Real-Time News Aggregation**
-- Pulls from 35+ trusted Indian news sources (TOI, NDTV, India Today, The Hindu, etc.)
-- Automatic RSS feed parsing and continuous updates
+Aggregates news from 39 Indian RSS feeds, matches articles to states/cities using NLP, and renders an interactive Leaflet.js heatmap with color-coded intensity markers.
 
-🗺️ **Interactive Heatmap Visualization**
-- Dynamic color-coded markers (yellow → dark red) based on news intensity
-- Hover tooltips showing actual news headlines
-- Circle marker sizing scales with news volume
-- Built with Leaflet.js and OpenStreetMap
-
-🎨 **Smart Geo-Matching**
-- Automatically detects state and city mentions in news articles
-- Whole-word matching prevents false positives (e.g., "Agra" vs "diagram")
-- 28 states + 8 union territories + major cities covered
-- Enriched location data with city-level granularity
-
-🚀 **Production-Ready Pipeline**
-- Automated 3-step data processing pipeline
-- Error handling and graceful failure modes
-- Clean separation of concerns (fetch → process → visualize)
-
-📊 **Responsive & Professional UI**
-- Full-screen interactive map interface
-- Organized legend with color-coded intensity levels
-- Mobile-friendly responsive design
+**Key Features:**
+- Async RSS fetching with `aiohttp` (10s timeout per feed)
+- PostgreSQL storage via SQLAlchemy (Neon-compatible)
+- Automated hourly updates using APScheduler
+- Whole-word geo-matching across 36 states/UTs + 500+ cities
+- Dynamic circle markers with hover popups
 
 ---
 
-## ⚡ Quick Start
-
-### Prerequisites
-- Python 3.8+
-- pip package manager
-- Modern web browser
-
-### Installation
+## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/indiser/bharat-news-atlas.git
-cd bharat-news-atlas
-
 # Install dependencies
 pip install -r requirements.txt
+
+# Configure database
+echo "DATABASE_URL=postgresql://user:pass@host/db" > .env
+
+# Run server
+python app.py
 ```
 
-### Usage
+Visit `http://localhost:5000`
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│  fetch_news.py (Async RSS Aggregator)      │
+│  └─ 39 feeds → aiohttp → RAM dict          │
+└──────────────────┬──────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────┐
+│  process_data_india.py (Geo-Matcher)       │
+│  ├─ Loads india_locations_cities.csv       │
+│  ├─ Whole-word search in headlines         │
+│  └─ Pushes to PostgreSQL (heatmap_data)    │
+└──────────────────┬──────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────┐
+│  app.py (Flask API + Scheduler)            │
+│  ├─ /api/news → JSON from DB               │
+│  └─ APScheduler (hourly pipeline)          │
+└──────────────────┬──────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────┐
+│  templates/index.html (Leaflet.js UI)      │
+│  └─ Circle markers + heat layer            │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+## Project Structure
+
+```
+India Heatmap/
+├── app.py                      # Flask server + APScheduler
+├── fetch_news.py               # Async RSS scraper (39 feeds)
+├── process_data_india.py       # Geo-matching + DB writer
+├── indian_visualizer.py        # Plotly alternative (unused in web)
+├── templates/
+│   └── index.html              # Leaflet.js map interface
+├── static/
+│   └── favicon.png
+├── india_locations_cities.csv  # State/city coordinates
+├── .env                        # DATABASE_URL config
+└── requirements.txt
+```
+
+---
+
+## How It Works
+
+### 1. News Fetching (`fetch_news.py`)
+
+Async fetches 39 RSS feeds using `aiohttp`:
+
+```python
+async def get_all_news():
+    # Returns: {"articles": [{"title": "...", "description": "..."}]}
+```
+
+**Sources:** TOI, NDTV, India Today, The Hindu, Indian Express, Business Standard, etc.
+
+### 2. Geo-Processing (`process_data_india.py`)
+
+```python
+def process_and_push_to_db(news_data):
+    # 1. Load 36 states + cities from CSV
+    # 2. Whole-word match: " delhi " in " new delhi summit "
+    # 3. Aggregate counts + headlines per region
+    # 4. Push to PostgreSQL (replaces table)
+```
+
+**Output Schema:**
+| Column | Type | Description |
+|--------|------|-------------|
+| State | TEXT | State/UT name |
+| Latitude | FLOAT | Geo-coordinate |
+| Longitude | FLOAT | Geo-coordinate |
+| news_count | INT | Article mentions |
+| headlines | TEXT | HTML-formatted list |
+
+### 3. API Server (`app.py`)
+
+- **`/`** → Renders `index.html`
+- **`/api/news`** → Returns JSON from `heatmap_data` table
+- **Background Job:** Runs `fetch → process → DB` every hour
+
+### 4. Visualization (`index.html`)
+
+- **Leaflet.js** map centered on India (22.35°N, 78.66°E)
+- **Circle Markers:** Size = `news_count * 2`, Color = intensity
+- **Heat Layer:** Gradient overlay (yellow → red)
+- **Popups:** Hover to see headlines
+
+**Color Scale:**
+- 🟡 1-3 stories: `#FEB24C`
+- 🟠 4-5 stories: `#FD8D3C`
+- 🔴 6-10 stories: `#E31A1C`
+- 🔻 11+ stories: `#800026`
+
+---
+
+## Configuration
+
+### Environment Variables
+
+Create `.env` file:
 
 ```bash
-# Run the complete pipeline
-python pipeline.py
+DATABASE_URL=postgresql://user:password@host:5432/database
 ```
 
-Then open your browser and navigate to:
-```
-http://127.0.0.1:5000
-```
+### RSS Feed Customization
 
-**That's it!** The application will:
-1. 📰 Fetch latest news from 35+ Indian news sources
-2. 🔍 Process and geo-match articles to states/cities
-3. 🗺️ Display an interactive heatmap with live news data
+Edit `fetch_news.py`:
 
----
-
-## 📖 Documentation
-
-### Project Structure
-
-```
-bharat-news-atlas/
-├── 📄 app.py                          # Flask server & API routes
-├── 📄 pipeline.py                     # Automated ETL pipeline orchestrator
-├── 📄 fetch_news.py                   # RSS feed scraper (35+ sources)
-├── 📄 process_data_india.py           # News processing & geo-matching engine
-├── 🗂️ templates/
-│   └── index.html                     # Interactive Leaflet.js map UI
-├── 🗂️ static/                         # CSS, images, favicon
-├── 📊 india_locations_cities.csv      # State/city geocoordinates
-├── 📊 india_heatmap_data.csv          # Processed output (news counts)
-├── 📋 requirements.txt                # Python dependencies
-└── 📋 README.md                       # This file
-```
-
-### How It Works
-
-#### **Step 1: Fetch News** (`fetch_news.py`)
-```python
-# Connects to 35+ RSS feeds from Indian news outlets
-# Extracts title and description from each article
-# Saves to news_data.json
-```
-- Sources: Times of India, NDTV, India Today, The Hindu, Indian Express, etc.
-- Output: `news_data.json` with articles array
-
-#### **Step 2: Process Data** (`process_data_india.py`)
-```python
-# 1. Loads location data (states + cities with coordinates)
-# 2. Searches article text for state/city mentions
-# 3. Counts news articles per region
-# 4. Generates tooltip content with headlines
-```
-- Smart matching: Whole-word search prevents false positives
-- Includes major cities (Agra, Bangalore, Delhi, Mumbai, etc.)
-- Output: `india_heatmap_data.csv` with columns:
-  - `State` - State/UT name
-  - `Latitude` & `Longitude` - Geo-coordinates
-  - `news_count` - Number of mentioning articles
-  - `headlines` - Formatted news headlines for tooltips
-
-#### **Step 3: Visualize** (`app.py` + `index.html`)
-```python
-# Flask API serves geo-tagged news data
-# Frontend renders interactive Leaflet.js map
-# Real-time updates via color-coded circles
-```
-- API endpoint: `/api/news` (returns processed heatmap data)
-- Color scheme:
-  - 🟡 Yellow: 1-3 stories
-  - 🟠 Orange: 4-5 stories  
-  - 🔴 Red: 6-10 stories
-  - 🔻 Dark Red: 11+ stories
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  BHARAT NEWS ATLAS                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│  📡 DATA INPUT LAYER                                         │
-│  ├─ 35+ RSS Feeds → fetch_news.py → news_data.json          │
-│  └─ Location Data → india_locations_cities.csv              │
-│                                                               │
-│  ⚙️ PROCESSING LAYER                                         │
-│  ├─ Geo-matching Engine (process_data_india.py)             │
-│  └─ Output: india_heatmap_data.csv                          │
-│                                                               │
-│  🌐 VISUALIZATION LAYER                                      │
-│  ├─ Flask Backend (app.py) - /api/news endpoint             │
-│  ├─ Leaflet.js Frontend (index.html)                        │
-│  └─ Interactive Heatmap UI                                  │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🛠️ Technologies
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Backend** | Flask | Lightweight web server & API |
-| **Data Processing** | Pandas | CSV handling & data transformation |
-| **Feed Parsing** | Feedparser | RSS feed extraction |
-| **Frontend** | Leaflet.js | Interactive geospatial mapping |
-| **Maps** | OpenStreetMap | Base map tiles |
-| **Language** | Python 3.8+ | Core logic |
-
----
-
-## 📋 Requirements
-
-```
-Flask           # Web server framework
-pandas          # Data processing & CSV handling
-feedparser      # RSS/Atom feed parsing
-```
-
-See [requirements.txt](requirements.txt) for full dependencies.
-
----
-
-## 🎨 Customization
-
-### Add More News Sources
-Edit `fetch_news.py` and add RSS feed URLs to the `RSS_FEEDS` list:
 ```python
 RSS_FEEDS = [
-    "https://your-news-source.com/feed/",
-    # ... more feeds
+    "https://your-feed.com/rss",
+    # Add more feeds here
 ]
 ```
 
-### Modify Color Thresholds
-In `templates/index.html`, update the `getColor()` function:
-```javascript
-function getColor(d) {
-    return d > 10 ? '#800026' : // Dark Red
-           d > 5  ? '#BD0026' : // Red
-           // ... customize as needed
-}
-```
+### Location Data
 
-### Adjust Geographic Bounds
-Update the initial map view in `index.html`:
-```javascript
-var map = L.map('map').setView([22.3511, 78.6677], 5);
-                              // ↑ Latitude, Longitude, Zoom
+`india_locations_cities.csv` format:
+
+```csv
+Code,Lat,Long,State,cities
+DL,28.7041,77.1025,Delhi,"New Delhi, Shahdara, South"
 ```
 
 ---
 
-## 📊 Sample Output
+## Dependencies
 
-The interactive map displays:
-- **Hover over any circle** → See news headlines for that state
-- **Circle size** → Proportional to news volume
-- **Circle color** → Indicates intensity (yellow = low, dark red = high)
-- **Popup tooltip** → Full state name + exact article count
-
----
-
-## 🚀 Performance Considerations
-
-- **News Fetching**: ~5-15 seconds (depends on feed responsiveness)
-- **Data Processing**: <1 second for 500+ articles
-- **Map Load**: <500ms (optimized JSON delivery)
-- **Total Pipeline Runtime**: ~30-60 seconds
+```
+Flask              # Web framework
+pandas             # CSV/data processing
+feedparser         # RSS parsing
+aiohttp            # Async HTTP client
+sqlalchemy         # Database ORM
+psycopg2-binary    # PostgreSQL driver
+apscheduler        # Background jobs
+python-dotenv      # Environment config
+gunicorn           # Production WSGI server
+```
 
 ---
 
-## 🐛 Troubleshooting
+## Deployment
+
+### Local Development
+
+```bash
+python app.py  # Runs on port 5000
+```
+
+### Production (Gunicorn)
+
+```bash
+gunicorn app:app --workers 4 --bind 0.0.0.0:8000
+```
+
+### Database Setup
+
+```sql
+CREATE TABLE heatmap_data (
+    "State" TEXT,
+    "Latitude" FLOAT,
+    "Longitude" FLOAT,
+    news_count INT,
+    headlines TEXT
+);
+```
+
+---
+
+## Performance
+
+- **RSS Fetch:** ~8-12s (parallel async)
+- **Geo-Processing:** <2s for 500+ articles
+- **DB Write:** <1s (table replace)
+- **API Response:** <200ms
+- **Total Pipeline:** ~15s
+
+---
+
+## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| **"news_data.json not found"** | Run `fetch_news.py` first to populate news data |
-| **Empty heatmap** | Check that articles contain state/city names; run `process_data_india.py` manually |
-| **Slow map loading** | Reduce number of articles or optimize circle rendering |
-| **Port 5000 already in use** | Change `app.run(port=5001)` in app.py |
+| `DATABASE_URL not found` | Create `.env` file with connection string |
+| Empty map | Check DB has data: `SELECT COUNT(*) FROM heatmap_data` |
+| Slow fetching | Reduce RSS feeds or increase timeout |
+| Port conflict | Change `app.run(port=5001)` |
 
 ---
 
-## 📈 Future Enhancements
+## Alternative Visualizer
 
-- [ ] Real-time socket updates without page refresh
-- [ ] Sentiment analysis (positive/negative/neutral news)
-- [ ] Time-series animation showing news trends
-- [ ] Export data to JSON/CSV/Excel
-- [ ] Mobile app (React Native)
-- [ ] News source filtering & custom RSS feeds
-- [ ] Caching layer for improved performance
-- [ ] Docker containerization
+`indian_visualizer.py` provides a Plotly-based standalone map:
 
----
+```bash
+python indian_visualizer.py
+```
 
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
+Requires `india_heatmap_data.csv` (legacy CSV-based workflow).
 
 ---
 
-## 🤝 Contributing
+## License
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-## ✨ Credits
+## Credits
 
-Built with ❤️ using Flask, Pandas, Leaflet.js, and OpenStreetMap.
+Built with Flask, Leaflet.js, OpenStreetMap, and PostgreSQL.
 
-**Data Sources**: TOI, NDTV, India Today, The Hindu, Indian Express, and 30+ other trusted Indian news outlets.
-
----
-
-<div align="center">
-
-**[Back to Top](#-bharat-news-atlas)**
-
-Made with 🇮🇳 for India
-
-</div>
+**Data Sources:** 39 Indian news outlets including Times of India, NDTV, The Hindu, Indian Express, and more.
