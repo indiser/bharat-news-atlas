@@ -3,7 +3,7 @@ import sys
 import pandas as pd
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
-
+from datetime import datetime, timezone
 load_dotenv()
 
 def process_and_push_to_db(news_data):
@@ -61,6 +61,8 @@ def process_and_push_to_db(news_data):
 
     if "cities" in df_final.columns:
         df_final.drop("cities", axis=1, inplace=True)
+    
+    df_final['last_updated'] = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
