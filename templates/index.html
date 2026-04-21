@@ -74,6 +74,22 @@
     </style>
 </head>
 <body>
+    <div id="timestamp-badge" style="
+        position: absolute; 
+        top: 15px; 
+        right: 15px; 
+        z-index: 1000; 
+        background: rgba(255, 255, 255, 0.95); 
+        padding: 8px 15px; 
+        border-radius: 6px; 
+        font-size: 13px; 
+        font-weight: 600; 
+        color: #333;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        border-left: 4px solid #E31A1C;
+    ">
+        Data Status: Fetching...
+    </div>
 
     <div id="map"></div>
 
@@ -105,6 +121,26 @@
                 
                 var heatData = [];
                 var maxVal = 0;
+
+                if (data.length > 0 && data[0].last_updated) {
+                    // Force JS to read it as UTC
+                    let utcDate = new Date(data[0].last_updated + " UTC");
+            
+                    // Format to IST beautifully
+                    let localTime = utcDate.toLocaleString("en-IN", {
+                        timeZone: "Asia/Kolkata",
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+            
+                    document.getElementById('timestamp-badge').innerHTML = `Live: ${localTime}`;
+                } else {
+                    document.getElementById('timestamp-badge').innerHTML = `Status: No Data Available`;
+                }
 
                 data.forEach(point => {
                     var lat = point.Latitude || point.Lat;
