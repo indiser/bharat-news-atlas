@@ -47,19 +47,6 @@ def get_news():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
-@app.route('/api/trigger-pipeline')
-def trigger():
-    # 1. Secure the endpoint so random people can't spam your database
-    secret = os.environ.get("CRON_SECRET")
-    auth_header = request.headers.get("Authorization")
-    
-    if auth_header != f"Bearer {secret}":
-        return jsonify({"error": "Unauthorized. Get out."}), 401
-        
-    # 2. Run the pipeline in a separate thread so it doesn't block the web response
-    threading.Thread(target=run_pipeline).start()
-    
-    return jsonify({"message": "Pipeline execution triggered successfully."}), 200
 
 if __name__ == '__main__':
     app.run()
