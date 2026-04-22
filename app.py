@@ -1,11 +1,7 @@
 from flask import Flask, render_template, jsonify, request
 import pandas as pd
 import os
-import asyncio
 from sqlalchemy import create_engine
-from fetch_news import get_all_news
-from process_data_india import process_and_push_to_db
-import threading
 
 app = Flask(__name__)
 
