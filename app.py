@@ -9,20 +9,6 @@ import threading
 
 app = Flask(__name__)
 
-def run_pipeline():
-    """Executes the pipeline purely in RAM, no subprocesses, no temp files."""
-    print("🚀 Running Background Pipeline natively...")
-    try:
-        # 1. Fetch data into a RAM variable
-        news_data = asyncio.run(get_all_news())
-        
-        # 2. Pass that variable directly to the database processor
-        process_and_push_to_db(news_data)
-        
-        print("✅ Pipeline execution complete.")
-    except Exception as e:
-        print(f"❌ Pipeline failed: {e}")
-
 @app.route('/')
 def home():
     return render_template('index.html')
