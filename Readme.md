@@ -1,4 +1,4 @@
-# # 🇮🇳 Bharat News Atlas
+# 🇮🇳 Bharat News Atlas
 
 Real-time geospatial visualization of news across India using async RSS aggregation and PostgreSQL.
 
