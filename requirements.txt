@@ -2,7 +2,7 @@ Flask
 pandas
 feedparser
 gunicorn
-psycopg2-binary
+psycopg[binary]
 sqlalchemy
 uvicorn
 apscheduler
